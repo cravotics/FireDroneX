@@ -898,10 +898,8 @@ class FireDepthLocalizer(Node):
     def image_callback(self, msg):
         try:
             self.latest_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-            # self.get_logger().info("Image received") # Too verbose for every frame
         except Exception as e:
-            # self.get_logger().error(f"Error converting image: {e}")
-            self.latest_image = None # Ensure latest_image is None if conversion fails
+            self.latest_image = None 
 
 # Main function to run the node
 def main(args=None):
