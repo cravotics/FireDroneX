@@ -11,9 +11,12 @@ from visualization_msgs.msg import Marker, MarkerArray
 import numpy as np
 import math
 
+# Main Class for Monacular Projection FireDroneX
 class SafeFireDroneX(Node):
     def __init__(self):
         super().__init__('safe_firedronex_sim')
+
+        # Mission parameters
         self.fire_detected = False
         self.odom_x = 0.0
         self.odom_y = 0.0
@@ -31,6 +34,11 @@ class SafeFireDroneX(Node):
         self.initial_search = True
         self.last_theta = 0.0
         self.search_center = None
+        self.fire_id = 1
+        self.fire_id_map = {}
+        self.state = 'SEARCH'
+        
+        # Camera parameters
         self.cx = 960.0
         self.cy = 540.0
         self.qx = 0.0
@@ -40,9 +48,6 @@ class SafeFireDroneX(Node):
         self.fx = 1397.2235870361328
         self.fy = 1397.2235298156738
         self.camera_pitch = -0.785
-        self.fire_id = 1
-        self.fire_id_map = {}
-        self.state = 'SEARCH'
         self.ROI_WIDTH = 500   
         self.ROI_HEIGHT = 300  
 
@@ -66,7 +71,10 @@ class SafeFireDroneX(Node):
         self.trajectory_pub = self.create_publisher(TrajectorySetpoint, '/fmu/in/trajectory_setpoint', 10)
         self.offboard_pub = self.create_publisher(OffboardControlMode, '/fmu/in/offboard_control_mode', 10)
         
+        # QoS settings
         qos = QoSProfile(depth=10, reliability=QoSReliabilityPolicy.BEST_EFFORT)
+        
+        # Creating Subscritions for detections, odometry and control mode
         self.create_subscription(
             Detection2DArray,
             '/detections',
@@ -87,11 +95,13 @@ class SafeFireDroneX(Node):
             self.control_mode_callback,
             QoSProfile(depth=10, reliability=QoSReliabilityPolicy.BEST_EFFORT)
         )
-
-        self.create_timer(0.1, self.mission_loop)
-
-        self.get_logger().info("FireDroneX node started")
         
+        # Creating a timer for the mission loop
+        self.create_timer(0.1, self.mission_loop)
+        
+        self.get_logger().info("FireDroneX node started")
+
+    # Callback for detection and processing the detected objects    
     def detection_callback(self, msg):
         
         if self.state not in ['SEARCH', 'CIRCLE']:
@@ -172,6 +182,7 @@ class SafeFireDroneX(Node):
             self.hover_start_time = None
             self.get_logger().info(f"New location for fire target: {fire_pos} - Moving Towards it")
     
+    # Clustering fire positions to avoid duplicate detections that are too close
     def cluster_fire_positions(self, x, y, z, threshold=1.0, min_separation=0.8):
         for i, (fx, fy, fz) in enumerate(self.detected_fires):
             distance = math.sqrt((x - fx) ** 2 + (y - fy) ** 2)
@@ -189,6 +200,7 @@ class SafeFireDroneX(Node):
             
         return (round(x, 1), round(y, 1), z)
     
+    # The function to convert pixel coordinates to ground coordinates using camera parameters
     def pixel_to_ground(self, cx, cy):
         x_cam = (cx - self.cx) / self.fx
         y_cam = (cy - self.cy) / self.fy
@@ -203,7 +215,7 @@ class SafeFireDroneX(Node):
         if dir_z >= -1e-6:
             return None
         
-        # Calculate the intersection with the ground plane
+        # Calculating the intersection with the ground plane
         ground_z = 0.4
         s =  (ground_z- self.odom_z) / dir_z
         ground_xy = np.array([self.odom_x, self.odom_y]) + s * dir_world[:2]
@@ -221,10 +233,12 @@ class SafeFireDroneX(Node):
                 return None        
         else:
             return (float(ground_xy[0]), float(ground_xy[1]), ground_z)
-        
+
+    # The main function for the drone's mission    
     def mission_loop(self):        
         self.publish_offboard_control()
         
+        # Checking if the drone is in offboard mode
         if self.control_mode is None:
             self.get_logger().warn("Control mode not set")
             return
@@ -233,21 +247,21 @@ class SafeFireDroneX(Node):
             self.get_logger().warn("Offboard control not enabled. Waiting for offboard mode.")
             return
         
+        # Checking the presence of a fire target
         if self.fire_target is not None:
             if self.fire_target in self.visited_fires:
                 self.get_logger().info(f"Fire target {self.fire_target} already visited. Searching for new fire.")
                 self.fire_target = None
                 return
         
+        # Processing the fire target if it exists
         if self.fire_target:
             target_x, target_y, target_z = self.fire_target
             distance = math.sqrt((target_x - self.odom_x) ** 2 + (target_y - self.odom_y) ** 2)
             
+            # Handling 'STOP_AND_RECALCULATE' state
             if self.state == 'STOP_AND_RECALCULATE':
-                
                 self.publish_setpoint(self.odom_x, self.odom_y, -7.0, yaw=self.target_face_yaw)
-
-                # Recalculate for 1.5 seconds
                 time_elapsed = self.get_clock().now().nanoseconds / 1e9 - self.recalculate_start_time
                 if time_elapsed < 10.0:
                     if not hasattr(self, 'last_log_time'):
@@ -271,6 +285,7 @@ class SafeFireDroneX(Node):
                 self.state = 'HOLD'
                 self.approach_start_time = self.get_clock().now().nanoseconds / 1e9
             
+            # Handling 'HOLD' state
             if self.state == 'HOLD':
                 hold_duration = self.get_clock().now().nanoseconds / 1e9 - self.approach_start_time
                 if hold_duration < 2.0:
@@ -279,7 +294,8 @@ class SafeFireDroneX(Node):
                 else:
                     self.get_logger().info("Hold complete. Starting slow approach to fire.")
                     self.state = 'APPROACH'
-
+            
+            # Handling 'APPROACH' state
             if self.state == 'APPROACH' and self.fire_target:
                 target_x, target_y, target_z = self.fire_target
                 dx = target_x - self.odom_x
@@ -299,11 +315,11 @@ class SafeFireDroneX(Node):
                 vx = self.kp * error_x + self.ki * self.integral_x + self.kd * derivative_x
                 vy = self.kp * error_y + self.ki * self.integral_y + self.kd * derivative_y
 
-                # Save error for next iteration
+                # Saving error for next iteration
                 self.prev_error_x = error_x
                 self.prev_error_y = error_y
 
-                # Clamp velocity
+                # Clamping velocity
                 max_vel = 0.3
                 vx = max(min(vx, max_vel), -max_vel)
                 vy = max(min(vy, max_vel), -max_vel)
@@ -331,6 +347,7 @@ class SafeFireDroneX(Node):
                     self.circle_theta = 0.0
                     return
         
+        # Handling circling around the fire target
         if self.circling and self.circle_center:
             center_x, center_y = self.circle_center
             
@@ -387,6 +404,7 @@ class SafeFireDroneX(Node):
             self.publish_setpoint(target_x, target_y, target_z, yaw = yaw)
             return
         
+        # Intial search for fire
         if not self.fire_target and not self.circling:
 
             if self.search_center is None:
@@ -413,14 +431,15 @@ class SafeFireDroneX(Node):
             yaw = math.atan2(target_y - center_y, target_x - center_x)
             self.publish_setpoint(target_x, target_y, target_z, yaw = yaw)
             
-            
+    # Function to publish velocity setpoint        
     def publish_velocity_setpoint(self, vx, vy, vz):
         setpoint = TrajectorySetpoint()
         setpoint.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         setpoint.velocity = [float(vx), float(vy), float(vz)]
         setpoint.yaw = float(self.current_yaw) 
         self.trajectory_pub.publish(setpoint)
-        
+
+    # Function to publish visualization markers   
     def publish_vizualization(self):
         drone_marker = Marker()
         drone_marker.header.frame_id = "map"
@@ -465,6 +484,7 @@ class SafeFireDroneX(Node):
             
         self.fire_marker_pub.publish(fire_array)
     
+    # Callback for odometry data
     def odom_callback(self, msg):
         self.odom_x = msg.position[0]
         self.odom_y = msg.position[1]
@@ -479,16 +499,19 @@ class SafeFireDroneX(Node):
         r = R.from_quat([q[0], q[1], q[2], q[3]])
         self.current_yaw = r.as_euler('zyx')[0]
     
+    # Function to publish setpoint for the drone
     def publish_setpoint(self, x, y, z, yaw = 0.0):
         setpoint = TrajectorySetpoint()
         setpoint.timestamp = int(self.get_clock().now().nanoseconds / 1000)
         setpoint.position = [float(x), float(y), float(z)]
         setpoint.yaw = float(yaw)         
         self.trajectory_pub.publish(setpoint)
-
+  
+    # Function to handle control mode callback
     def control_mode_callback(self, msg):
         self.control_mode = msg
-
+    
+    # Function to publish offboard control mode
     def publish_offboard_control(self):
         offboard_mode = OffboardControlMode()
         offboard_mode.timestamp = int(self.get_clock().now().nanoseconds / 1000)
