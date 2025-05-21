@@ -13,17 +13,16 @@ import time
 from collections import deque
 
 LOG_DIRECTORY = "/home/varun/ws_offboard_control/firedronex_plots"
-MAX_DATA_POINTS_TRAJECTORY = 2000 # Max data points to keep in memory for trajectory/altitude/state plots for performance
-MAX_DATA_POINTS_DETECTIONS = 500 # Max fire detection points to keep in memory for performance
-PLOT_UPDATE_INTERVAL_MS = 1000  # Update plots every 1 second
-
+MAX_DATA_POINTS_TRAJECTORY = 2000 
+MAX_DATA_POINTS_DETECTIONS = 500 
+PLOT_UPDATE_INTERVAL_MS = 1000  
 class LivePlotterNode(Node):
     def __init__(self):
         super().__init__('firedronex_live_plotter_node')
         self.get_logger().info(f"Log directory set to: {LOG_DIRECTORY}")
 
-        # Figure 1: 2D Trajectory & Fire Map (Separate Window)
-        self.fig_traj_map, self.ax_traj_map = plt.subplots(figsize=(10, 8)) # Larger figure size
+        # Figure 1: 2D Trajectory & Fire Map
+        self.fig_traj_map, self.ax_traj_map = plt.subplots(figsize=(10, 8)) 
         self.ax_traj_map.set_xlabel("X (m)")
         self.ax_traj_map.set_ylabel("Y (m)")
         self.ax_traj_map.set_title("2D Trajectory & Fire Map")
@@ -31,16 +30,16 @@ class LivePlotterNode(Node):
         self.drone_path_line, = self.ax_traj_map.plot([], [], 'b-', label="Drone Path")
         self.drone_current_pos_scatter = self.ax_traj_map.scatter([], [], c='blue', marker='o', s=50, label="Drone Current")
         self.fire_detections_scatter = self.ax_traj_map.scatter([], [], c='red', marker='x', s=40, label="Fire Detections")
-        self.current_target_scatter = self.ax_traj_map.scatter([], [], c='magenta', marker='*' , s=150, label="Current Target") # Corrected marker syntax
+        self.current_target_scatter = self.ax_traj_map.scatter([], [], c='magenta', marker='*' , s=150, label="Current Target") 
         self.ax_traj_map.legend(loc='upper right', fontsize='small')
         self.ax_traj_map.grid(True)
 
-        # Figure 2: Altitude Profile and Mission State (Combined in one window)
-        self.fig_other_plots, self.axs_other = plt.subplots(2, 1, figsize=(10, 8)) # 2 rows, 1 col
-        plt.figure(self.fig_other_plots.number) # Ensure subsequent plt commands target this figure
+        # Figure 2: Altitude Profile and Mission State 
+        self.fig_other_plots, self.axs_other = plt.subplots(2, 1, figsize=(10, 8)) 
+        plt.figure(self.fig_other_plots.number)
         plt.subplots_adjust(hspace=0.4)
 
-        # Setup for Graph 2: Altitude Profile (now on axs_other[0])
+        # Setup for Graph 2: Altitude Profile 
         self.ax_alt = self.axs_other[0]
         self.ax_alt.set_xlabel("Time (s)")
         self.ax_alt.set_ylabel("Altitude (Z, m)")
@@ -49,7 +48,7 @@ class LivePlotterNode(Node):
         self.ax_alt.legend(loc='upper right', fontsize='small')
         self.ax_alt.grid(True)
 
-        # Setup for Graph 3: Mission State Over Time (now on axs_other[1])
+        # Setup for Graph 3: Mission State Over Time
         self.ax_state = self.axs_other[1]
         self.ax_state.set_xlabel("Time (s)")
         self.ax_state.set_ylabel("Mission State")
@@ -63,7 +62,7 @@ class LivePlotterNode(Node):
         self.odom_x_data = deque(maxlen=MAX_DATA_POINTS_TRAJECTORY)
         self.odom_y_data = deque(maxlen=MAX_DATA_POINTS_TRAJECTORY)
         self.odom_z_data = deque(maxlen=MAX_DATA_POINTS_TRAJECTORY)
-        self.mission_states_numeric = deque(maxlen=MAX_DATA_POINTS_TRAJECTORY) # Store numeric representation of states
+        self.mission_states_numeric = deque(maxlen=MAX_DATA_POINTS_TRAJECTORY) 
         
         self.fire_x_data = deque(maxlen=MAX_DATA_POINTS_DETECTIONS)
         self.fire_y_data = deque(maxlen=MAX_DATA_POINTS_DETECTIONS)
@@ -71,25 +70,23 @@ class LivePlotterNode(Node):
         self.current_target_x = None
         self.current_target_y = None
 
-        self.mission_state_map = {} # To map state strings to numbers for plotting
+        self.mission_state_map = {} 
         self.next_mission_state_idx = 0
         
         self.latest_traj_log_file = None
         self.latest_det_log_file = None
         self.last_traj_read_time = 0
         self.last_det_read_time = 0
-        self.start_time_abs = time.time() # For relative time on plots if timestamps are absolute
+        self.start_time_abs = time.time() 
 
-        # Animation will be driven by the `fig_other_plots` (Altitude/State)
-        # The update_plots function will handle updating both figures.
         self.ani = animation.FuncAnimation(self.fig_other_plots, self.update_plots, init_func=self.init_plots, 
                                            interval=PLOT_UPDATE_INTERVAL_MS, blit=False, cache_frame_data=False)
         
         self.get_logger().info("Live plotter initialized. Waiting for log files...")
-        plt.show(block=True) # This will show all figures and block until the one with animation is closed.
-
+        plt.show(block=True)
+    
+    # Function to find the latest log files
     def find_latest_log_files(self):
-        # Attempt to find files
         traj_log_pattern = os.path.join(LOG_DIRECTORY, "trajectory_log.csv")
         det_log_pattern = os.path.join(LOG_DIRECTORY, "detection_log.csv")
 
@@ -108,14 +105,13 @@ class LivePlotterNode(Node):
             if self.latest_traj_log_file != latest_traj:
                 self.get_logger().info(f"New trajectory log file: {latest_traj}")
                 self.latest_traj_log_file = latest_traj
-                self.last_traj_read_time = 0 # Reset read time for new file
-                 # Reset data deques when a new file is chosen, to avoid mixing old and new session data
+                self.last_traj_read_time = 0 
                 self.timestamps.clear()
                 self.odom_x_data.clear()
                 self.odom_y_data.clear()
                 self.odom_z_data.clear()
                 self.mission_states_numeric.clear()
-                self.start_time_abs = time.time() # Reset relative start time
+                self.start_time_abs = time.time()
 
         if found_det_files:
             latest_det = max(found_det_files, key=os.path.getctime)
@@ -128,7 +124,7 @@ class LivePlotterNode(Node):
         
         return self.latest_traj_log_file is not None or self.latest_det_log_file is not None
 
-
+    # Function to load new data from the latest log files
     def load_new_data(self):
         new_data_loaded = False
         if not self.find_latest_log_files() and (self.latest_traj_log_file is None and self.latest_det_log_file is None) :
@@ -147,7 +143,6 @@ class LivePlotterNode(Node):
                     return np.nan
                 return float_val
             except (ValueError, TypeError) as e:
-                # Log only once per unique problematic column to avoid spam
                 log_key = f"conversion_error_{column_name}"
                 if not hasattr(self, '_logged_conversion_errors'):
                     self._logged_conversion_errors = set()
@@ -156,7 +151,7 @@ class LivePlotterNode(Node):
                     self._logged_conversion_errors.add(log_key)
                 return np.nan
 
-        # Load Trajectory Data
+        # Loading Trajectory Data
         if self.latest_traj_log_file:
             try:
                 current_mod_time = os.path.getmtime(self.latest_traj_log_file)
@@ -168,7 +163,7 @@ class LivePlotterNode(Node):
                         self.get_logger().info(f"Trajectory log head:\n{traj_df.head().to_string()}")
                         traj_df.columns = traj_df.columns.str.strip()
                         
-                        # Log data types and sample values before conversion
+                        # Logging data types and sample values before conversion
                         for col in ['drone_odom_x', 'drone_odom_y', 'drone_odom_z']:
                             if col in traj_df.columns:
                                 self.get_logger().info(f"Column {col} dtype before conversion: {traj_df[col].dtype}")
@@ -200,7 +195,7 @@ class LivePlotterNode(Node):
                             y = robust_float_conversion(row.get('drone_odom_y'), 'drone_odom_y', idx, self.get_logger())
                             z = robust_float_conversion(row.get('drone_odom_z'), 'drone_odom_z', idx, self.get_logger())
                             
-                            # Log first few converted values
+                            # Logging first few converted values
                             if idx < 5:
                                 self.get_logger().info(f"Row {idx} converted values: X={x:.6f}, Y={y:.6f}, Z={z:.6f}")
                             
@@ -225,7 +220,7 @@ class LivePlotterNode(Node):
                             self.current_target_x = None
                             self.current_target_y = None
                         
-                        # Check for all-NaN columns
+                        # Checking for all-NaN columns
                         if all(pd.isna(x) for x in self.odom_x_data): self.get_logger().warn("odom_x_data is all NaN after loading trajectory.", throttle_duration_sec=10)
                         if all(pd.isna(y) for y in self.odom_y_data): self.get_logger().warn("odom_y_data is all NaN after loading trajectory.", throttle_duration_sec=10)
                         if all(pd.isna(z) for z in self.odom_z_data): self.get_logger().warn("odom_z_data is all NaN after loading trajectory.", throttle_duration_sec=10)
@@ -279,13 +274,13 @@ class LivePlotterNode(Node):
         return new_data_loaded
 
     def init_plots(self):
-        # Initialize artists for trajectory map figure
+        # Initializing artists for trajectory map figure
         self.drone_path_line.set_data([], [])
         self.drone_current_pos_scatter.set_offsets(np.empty((0, 2)))
         self.fire_detections_scatter.set_offsets(np.empty((0, 2)))
         self.current_target_scatter.set_offsets(np.empty((0, 2)))
         
-        # Set initial limits and properties for trajectory map
+        # Setting initial limits and properties for trajectory map
         self.ax_traj_map.set_xlim(-10, 10)
         self.ax_traj_map.set_ylim(-10, 10)
         self.ax_traj_map.set_aspect('equal', adjustable='box')
@@ -293,9 +288,9 @@ class LivePlotterNode(Node):
         self.ax_traj_map.set_xlabel('X (meters)')
         self.ax_traj_map.set_ylabel('Y (meters)')
         self.ax_traj_map.set_title('2D Trajectory & Fire Map')
-        self.ax_traj_map.autoscale(False)  # Disable autoscaling
+        self.ax_traj_map.autoscale(False)  
         
-        # Initialize artists for altitude plot
+        # Initializing artists for altitude plot
         self.altitude_line.set_data([], [])
         self.ax_alt.set_xlim(0, 10)
         self.ax_alt.set_ylim(-10, 0)
@@ -304,7 +299,7 @@ class LivePlotterNode(Node):
         self.ax_alt.set_title('Altitude Profile')
         self.ax_alt.grid(True)
         
-        # Initialize artists for mission state plot
+        # Initializing artists for mission state plot
         self.mission_state_line.set_data([], [])
         self.ax_state.set_xlim(0, 10)
         self.ax_state.set_ylim(-0.5, 4.5)
@@ -313,34 +308,35 @@ class LivePlotterNode(Node):
         self.ax_state.set_title('Mission State Over Time')
         self.ax_state.grid(True)
         
-        # Adjust layout to prevent overlapping
+        # Adjusting layout to prevent overlapping
         self.fig_traj_map.tight_layout()
         self.fig_other_plots.tight_layout()
         
-        # Return all artists that will be updated and blitted
+        # Returning all metrics that will be updated and blitted
         return (self.drone_path_line, self.drone_current_pos_scatter, 
                 self.fire_detections_scatter, self.current_target_scatter, 
                 self.altitude_line, self.mission_state_line)
-
+    
+    # Function to update the plots with new data
     def update_plots(self, frame):
-        # --- Graph 1: 2D Trajectory & Fire Map (on self.ax_traj_map) ---
+        # Graph 1: 2D Trajectory & Fire Map (on self.ax_traj_map)
         all_plot_x_coords = []
         all_plot_y_coords = []
 
-        # Debug print raw data before filtering
+        # Printing raw data before filtering for debugging
         self.get_logger().info(f"Raw data points before filtering - X: {len(self.odom_x_data)}, Y: {len(self.odom_y_data)}")
         if len(self.odom_x_data) > 0:
             self.get_logger().info(f"Raw data sample - First point: X={list(self.odom_x_data)[0]}, Y={list(self.odom_y_data)[0]}")
             self.get_logger().info(f"Raw data sample - Last point: X={list(self.odom_x_data)[-1]}, Y={list(self.odom_y_data)[-1]}")
 
-        # Filter out NaN values for trajectory plotting
+        # Filtering out NaN values for trajectory plotting
         valid_traj_points = [(x, y) for x, y in zip(self.odom_x_data, self.odom_y_data) 
-                            if np.isfinite(x) and np.isfinite(y) and abs(x) < 1000 and abs(y) < 1000]  # Basic sanity check
+                            if np.isfinite(x) and np.isfinite(y) and abs(x) < 1000 and abs(y) < 1000]  
         self.get_logger().info(f"Valid trajectory points after filtering: {len(valid_traj_points)} points")
 
-        # Initialize plot limits
-        x_min, x_max = -10, 10  # Default limits
-        y_min, y_max = -10, 10  # Default limits
+        # Initializing plot limits
+        x_min, x_max = -10, 10 
+        y_min, y_max = -10, 10 
         data_present = False
 
         if valid_traj_points:
@@ -348,15 +344,15 @@ class LivePlotterNode(Node):
             all_plot_x_coords.extend(traj_x)
             all_plot_y_coords.extend(traj_y)
             
-            # Update trajectory line
+            # Updating trajectory line
             self.drone_path_line.set_data(traj_x, traj_y)
             
-            # Update current position marker (if available)
+            # Updating current position marker (if available)
             if traj_x and traj_y:
                 self.drone_current_pos_scatter.set_offsets(np.array([[traj_x[-1], traj_y[-1]]]))
                 data_present = True
                 
-                # Update limits based on trajectory
+                # Updating limits based on trajectory
                 x_min = min(x_min, min(traj_x))
                 x_max = max(x_max, max(traj_x))
                 y_min = min(y_min, min(traj_y))
@@ -366,7 +362,7 @@ class LivePlotterNode(Node):
             self.drone_path_line.set_data([], [])
             self.drone_current_pos_scatter.set_offsets(np.empty((0, 2)))
 
-        # Add fire detection points
+        # Adding fire detection points
         valid_fire_points = [(x, y) for x, y in zip(self.fire_x_data, self.fire_y_data) 
                            if np.isfinite(x) and np.isfinite(y) and abs(x) < 1000 and abs(y) < 1000]
         if valid_fire_points:
@@ -376,7 +372,7 @@ class LivePlotterNode(Node):
             self.fire_detections_scatter.set_offsets(np.array(list(zip(fire_x, fire_y))))
             data_present = True
             
-            # Update limits based on fire detections
+            # Updating limits based on fire detections
             x_min = min(x_min, min(fire_x))
             x_max = max(x_max, max(fire_x))
             y_min = min(y_min, min(fire_y))
@@ -384,7 +380,7 @@ class LivePlotterNode(Node):
         else:
             self.fire_detections_scatter.set_offsets(np.empty((0, 2)))
 
-        # Add current target
+        # Adding current target
         if (self.current_target_x is not None and self.current_target_y is not None and
             np.isfinite(self.current_target_x) and np.isfinite(self.current_target_y) and
             abs(self.current_target_x) < 1000 and abs(self.current_target_y) < 1000):
@@ -394,7 +390,7 @@ class LivePlotterNode(Node):
             self.current_target_scatter.set_offsets(np.array([[self.current_target_x, self.current_target_y]]))
             data_present = True
             
-            # Update limits based on target
+            # Updating limits based on target
             x_min = min(x_min, self.current_target_x)
             x_max = max(x_max, self.current_target_x)
             y_min = min(y_min, self.current_target_y)
@@ -402,34 +398,34 @@ class LivePlotterNode(Node):
         else:
             self.current_target_scatter.set_offsets(np.empty((0, 2)))
 
-        # Calculate and set axis limits with padding
+        # Calculating and set axis limits with padding
         if data_present:
-            # Calculate range and add padding
+            # Calculating range and add padding
             x_range = x_max - x_min
             y_range = y_max - y_min
             
             # Minimum range to prevent too small plots
-            min_range = 2.0  # At least 2 meters range
+            min_range = 2.0  
             x_range = max(x_range, min_range)
             y_range = max(y_range, min_range)
             
-            # Add padding (20% of range)
+            # Adding padding 
             x_padding = x_range * 0.2
             y_padding = y_range * 0.2
             
-            # Set new limits
+            # Setting new limits
             self.ax_traj_map.set_xlim(x_min - x_padding, x_max + x_padding)
             self.ax_traj_map.set_ylim(y_min - y_padding, y_max + y_padding)
         else:
-            # Default limits if no data
+            # Defaulting limits if no data
             self.ax_traj_map.set_xlim(-10, 10)
             self.ax_traj_map.set_ylim(-10, 10)
 
-        # Ensure equal aspect ratio and grid
+        # Ensuring equal aspect ratio and grid
         self.ax_traj_map.set_aspect('equal', adjustable='box')
         self.ax_traj_map.grid(True)
 
-        # --- Graph 2: Altitude Profile (on self.ax_alt) ---
+        # Graph 2: Altitude Profile
         valid_alt_points = [(t, z) for t, z in zip(self.timestamps, self.odom_z_data) 
                           if np.isfinite(t) and np.isfinite(z) and abs(z) < 1000]
         if valid_alt_points:
@@ -437,14 +433,14 @@ class LivePlotterNode(Node):
             self.altitude_line.set_data(alt_t, alt_z)
             self.ax_alt.set_xlim(min(alt_t), max(alt_t))
             z_min, z_max = min(alt_z), max(alt_z)
-            z_padding = max(0.1 * (z_max - z_min), 0.5)  # At least 0.5m padding
+            z_padding = max(0.1 * (z_max - z_min), 0.5) 
             self.ax_alt.set_ylim(z_min - z_padding, z_max + z_padding)
         else:
             self.altitude_line.set_data([], [])
             self.ax_alt.set_xlim(0, 10)
             self.ax_alt.set_ylim(-10, 0)
 
-        # --- Graph 3: Mission State (on self.ax_state) ---
+        # Graph 3: Mission State 
         valid_state_points = [(t, s) for t, s in zip(self.timestamps, self.mission_states_numeric) 
                             if np.isfinite(t) and np.isfinite(s)]
         if valid_state_points:
@@ -453,10 +449,10 @@ class LivePlotterNode(Node):
             self.ax_state.set_xlim(min(state_t), max(state_t))
             self.ax_state.set_ylim(-0.5, max(state_s) + 0.5)
 
-            # Set Y-tick labels to state names
+            # Setting Y-tick labels to state names
             if self.mission_state_map:
                 inv_mission_state_map = {v: k for k, v in self.mission_state_map.items()}
-                # Use unique states present in the current data for ticks
+                # Using unique states present in the current data for ticks
                 unique_numeric_states_in_plot = sorted(list(set(s for t_val, s in valid_state_points if np.isfinite(s))))
 
                 if unique_numeric_states_in_plot:
@@ -464,40 +460,37 @@ class LivePlotterNode(Node):
                     state_string_labels = [inv_mission_state_map.get(num_state, str(num_state)) for num_state in unique_numeric_states_in_plot]
                     self.ax_state.set_yticklabels(state_string_labels)
                 else:
-                    # Clear ticks if no valid states to plot or map is empty
+                    # Clearing ticks if no valid states to plot or map is empty
                     self.ax_state.set_yticks([])
                     self.ax_state.set_yticklabels([])
             else:
-                # Clear ticks if map is empty
+                # Clearing ticks if map is empty
                 self.ax_state.set_yticks([])
                 self.ax_state.set_yticklabels([])
 
         else:
             self.mission_state_line.set_data([], [])
 
-        # Load new data for next update
+        # Loading new data for next update
         self.load_new_data()
 
-        # Return all artists that were modified
+        # Returning all metrics that were modified
         return [self.drone_path_line, self.drone_current_pos_scatter, 
                 self.fire_detections_scatter, self.current_target_scatter,
                 self.altitude_line, self.mission_state_line]
 
 def main(args=None):
     rclpy.init(args=args)
-    plotter_node = None # Define beforehand for access in finally
+    plotter_node = None 
     
     try:
-        plotter_node = LivePlotterNode() # plt.show() is in its __init__
-        # If plt.show() returns normally (window closed by user, not Ctrl+C), 
-        # execution continues here.
+        plotter_node = LivePlotterNode() 
     except KeyboardInterrupt:
         if plotter_node:
             plotter_node.get_logger().info("Keyboard interrupt detected during plotting. Shutting down.")
         else:
-            # This case might occur if interrupt happens very early in plotter_node's __init__
             print("Keyboard interrupt detected during plotter initialization. Shutting down.")
-    except Exception as e: # Catch other potential errors during init/plotting
+    except Exception as e: 
         if plotter_node:
             plotter_node.get_logger().error(f"An unexpected error occurred: {e}. Shutting down.", exc_info=True)
         else:
@@ -507,7 +500,6 @@ def main(args=None):
     finally:
         if plotter_node:
             plotter_node.get_logger().info("Plotter shutting down. Closing figures.")
-            # Check if figures exist before trying to close
             if hasattr(plotter_node, 'fig_traj_map') and plotter_node.fig_traj_map is not None:
                 try:
                     plt.close(plotter_node.fig_traj_map)
@@ -524,8 +516,7 @@ def main(args=None):
             if plotter_node and hasattr(plotter_node, 'destroy_node') and callable(plotter_node.destroy_node):
                  plotter_node.get_logger().info("Destroying plotter ROS node.")
                  plotter_node.destroy_node()
-            
-            # Log before shutting down rclpy
+        
             if plotter_node: 
                 plotter_node.get_logger().info("Shutting down RCLPY.")
             else:
