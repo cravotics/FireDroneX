@@ -17,9 +17,10 @@ TIMER_RATE_DEFAULT = 30  # Hz
 RECONNECTION_DELAY = 5  # Seconds
 MAX_RECONNECT_ATTEMPTS = 3
 CONSECUTIVE_FAILURES_THRESHOLD = 5
-STREAM_TIMEOUT = 10  # Seconds before considering stream dead
-KEEPALIVE_INTERVAL = 5  # Seconds between keepalive packets
+STREAM_TIMEOUT = 10  # Seconds 
+KEEPALIVE_INTERVAL = 5  # Seconds 
 
+# Main class for RTSP stream publisher
 class RTSPStreamPublisher(Node):
     def __init__(self):
         super().__init__('rtsp_stream_publisher')
@@ -40,19 +41,20 @@ class RTSPStreamPublisher(Node):
         self.last_keepalive_time = 0
         self.ffmpeg_process = None
         
-        # Configure OpenCV RTSP settings with more robust options
+        # Configuring OpenCV RTSP settings with more robust options
         os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = (
-            'rtsp_transport;tcp|'  # Use TCP for more reliable connection
-            'buffer_size;102400|'  # Larger buffer for network jitter
-            'stimeout;10000000|'   # Socket timeout in microseconds (10 seconds)
-            'rtsp_flags;prefer_tcp|'  # Prefer TCP over UDP
-            'rtsp_transport;tcp|'  # Force TCP transport
+            'rtsp_transport;tcp|'  # Using TCP for more reliable connection
+            'buffer_size;102400|'  # Larger buffer is to compensate for network jitter
+            'stimeout;10000000|'   # Socket timeout in microseconds
+            'rtsp_flags;prefer_tcp|'  # Preferring TCP over UDP
+            'rtsp_transport;tcp|'  # Forcing TCP transport
             'max_delay;500000|'     # Maximum demux-decode delay in microseconds
             'flags;low_delay|'      # Low latency mode
-            'fflags;nobuffer|'      # Disable buffering
+            'fflags;nobuffer|'      # Disabling buffering
             'flags2;fast'           # Fast decoding
         )
         
+        # QoS settings for the image publisher
         self.image_publisher_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE, 
@@ -60,6 +62,7 @@ class RTSPStreamPublisher(Node):
             depth=1 
         )
         
+        # Setting up the image publisher
         self.image_pub = self.create_publisher(
             Image, 
             self.camera_topic, 
@@ -69,7 +72,8 @@ class RTSPStreamPublisher(Node):
         self._connect_to_stream()
         self.timer = self.create_timer(1.0 / max(1, self.timer_rate_val), self.publish_frame)
         self.get_logger().info(f"RTSP Publisher started. Attempting to stream from {self.rtsp_url} to {self.camera_topic}")
-
+    
+    # Checking if the RTSP server is responding
     def _check_rtsp_server(self):
         """Check if RTSP server is responding using ffprobe"""
         try:
@@ -91,24 +95,24 @@ class RTSPStreamPublisher(Node):
         except Exception as e:
             self.get_logger().error(f"Error checking RTSP server: {e}")
             return False
-
+    
+    # Function to connect to the RTSP stream
     def _connect_to_stream(self):
         if self.cap is not None:
             self.cap.release()
             self.cap = None
 
-        # First check if RTSP server is responding
+        # Checking if RTSP server is responding
         if not self._check_rtsp_server():
             self.get_logger().error("RTSP server not responding. Will retry.")
             return False
 
         self.get_logger().info(f"Attempting to open RTSP stream: {self.rtsp_url} using FFmpeg backend")
         
-        # Try different codec configurations
         codec_configs = [
-            (cv2.CAP_FFMPEG, None),  # Default
-            (cv2.CAP_FFMPEG, cv2.VideoWriter_fourcc(*'H264')),  # Force H264
-            (cv2.CAP_FFMPEG, cv2.VideoWriter_fourcc(*'HEVC'))   # Try HEVC
+            (cv2.CAP_FFMPEG, None),  
+            (cv2.CAP_FFMPEG, cv2.VideoWriter_fourcc(*'H264')),  
+            (cv2.CAP_FFMPEG, cv2.VideoWriter_fourcc(*'HEVC'))  
         ]
         
         for backend, codec in codec_configs:
@@ -120,15 +124,15 @@ class RTSPStreamPublisher(Node):
                 if codec:
                     self.cap.set(cv2.CAP_PROP_FOURCC, codec)
                 
-                # Configure OpenCV capture properties
-                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize buffer size
+                # Configuring OpenCV capture properties
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimizing buffer size
                 
-                # Set additional properties for better stream handling
-                self.cap.set(cv2.CAP_PROP_FPS, 30)  # Set expected FPS
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)  # Set expected width
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 768)  # Set expected height
+                # Setting additional properties for better stream handling
+                self.cap.set(cv2.CAP_PROP_FPS, 30)  
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1024)  
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 768) 
                 
-                # Verify we can actually read a frame
+                # Reading a frame to check if the stream is valid
                 ret, frame = self.cap.read()
                 if ret and frame is not None:
                     self.get_logger().info(f"Successfully opened RTSP stream with codec: {codec if codec else 'default'}")
@@ -149,25 +153,25 @@ class RTSPStreamPublisher(Node):
         
         self.get_logger().error("Failed to open RTSP stream with any codec configuration")
         return False
-
+    
+    # Function to send a keepalive packet
     def _send_keepalive(self):
         """Send a keepalive packet to maintain the RTSP connection"""
         if self.cap is not None and self.cap.isOpened():
             try:
-                # Read a frame but don't process it
                 self.cap.grab()
                 self.last_keepalive_time = time.time()
             except Exception as e:
                 self.get_logger().warn(f"Keepalive failed: {e}")
-
+    
+    # Function to publish the frame
     def publish_frame(self):
         current_time = time.time()
         
-        # Check if we need to send a keepalive
         if current_time - self.last_keepalive_time >= KEEPALIVE_INTERVAL:
             self._send_keepalive()
         
-        # Check for stream timeout
+        # Checking for stream timeout
         if current_time - self.last_frame_time >= STREAM_TIMEOUT:
             self.get_logger().warn(f"Stream timeout detected. Last frame received {current_time - self.last_frame_time:.1f} seconds ago.")
             if self.cap is not None:
@@ -202,7 +206,7 @@ class RTSPStreamPublisher(Node):
                         self.reconnect_attempts = 0
                 return
 
-            # Reset failure counters on successful frame
+            # Resetting failure counters on successful frame
             self.consecutive_failures = 0
             self.reconnect_attempts = 0
             self.last_frame_time = current_time
@@ -212,8 +216,8 @@ class RTSPStreamPublisher(Node):
             img_msg.header.frame_id = "camera_optical_frame"
             self.image_pub.publish(img_msg)
             
-            # Log frame rate periodically
-            if current_time - self.last_frame_time >= 5.0:  # Log every 5 seconds
+            # Logging frame rate periodically
+            if current_time - self.last_frame_time >= 5.0: 
                 self.get_logger().info(f"Publishing frame: {frame.shape}")
                 
         except Exception as e:
