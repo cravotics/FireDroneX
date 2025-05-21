@@ -1,88 +1,53 @@
+# FireDrone-X: Autonomous UAV Fire & Human Detection System
 
-# 🚁 FireDrone-X Final Project – ENAE788M
-
-### 👨‍🔬 Team Members
+## Team Members
 - **Sai Jagadeesh Muralikrishnan** (120172243)
 - **Varun Lakshmanan** (120169595)
 
 ---
 
-## 📌 Project Overview
+## Overview
 
-**FireDrone-X** is an autonomous VOXL2-based drone system that detects **fire** and **humans** in real-time to aid in emergency response operations. It utilizes onboard cameras (stereo, high-res, tracking), GPS modules, and ROS 2 nodes for detection, trajectory planning, and GUI-based mission reporting.
+**FireDrone-X** is an autonomous drone system powered by VOXL2 that detects **fire** (using cones as proxies) and **humans** in real-time using a monocular RGB camera. It integrates **depth estimation**, **trajectory planning**, and **fire tracking logic** using ROS 2 for effective mission handling in fire hazard zones.
 
-We are using **open-source fire and human detection models** (e.g., YOLOv8 for humans and pretrained fire detection CNNs) instead of building a CNN from scratch with FIRESENSE.
+Two main fire localization strategies were implemented:
+- **Monocular Projection**: Estimates fire positions using pixel-to-ground transformation with known camera intrinsics and pitch.
+- **Monocular Depth Estimation**: Uses the **DepthAnythingV2** model to extract true 3D (x, y, z) coordinates directly from the depth map.
 
----
-
-## 🔧 Hardware Setup
-
-- **Platform**: VOXL2 Flight Deck (MDK-F0006-4-V1-C11)
-- **Cameras**: Stereo + Hi-res + Tracking (Cam Config 11)
-- **Flight Control**: VOXL2 IO PWM ESC, M0065 SBUS, GPS + EKF2
-- **GUI Interface**: PyQt5
+The system supports **live plotting**, **RTSP video streaming**, and a lightweight **PyQt5 GUI** for monitoring.
 
 ---
 
-## 🧠 Software Architecture
+## Software Modules
 
-### ROS 2 Packages:
-```
-fire_detector/         # OpenCV + pretrained fire detection CNN
-human_detector/        # YOLOv8 (ONNX Runtime) for person detection
-mission_control/       # Fire zone scoring, GPS path planning
-gui/                   # PyQt5 GUI to display live data and export reports
-scripts/voxl_interface_node.py  # Camera and GPS integration
-```
+### Detection Modules
+- `yolo_firedronex.py`: YOLOv8-based fire/person detection with projected localization.
+- `yolo_firedronex_real.py`: Optimized version for VOXL2 onboard runtime.
 
----
+### Mission Planning Modules
+- `firedronex_depth.py`: Mission logic using monocular depth estimation for getting the position of cone.
+- `firedronex_depth_real.py`: Real-time version of Monacular depth estimation method with VOXL2-specific optimizations.
+- `moncular_projection_firedroneX.py`: Mission logic using monocular projection which is based on trignometry.
 
-## 📅 Timeline & Milestones
+### Visualization & Streaming
+- `firedronex_live_plotter.py`: Real-time fire/person detection plotting.
+- `rtsp_stream_publisher.py`: Used to publish camera stream to GUI or external RTSP viewers.
 
-### ✅ Phase 1: Simulation Setup (Due **May 11**)
-- [ ] Build simulation environment in Unreal Engine or Gazebo
-- [ ] Integrate person detection (YOLOv8)
-- [ ] Integrate fire detection using open-source model
-- [ ] Simulate GPS and fire values
-- [ ] Connect to GUI base station and verify telemetry updates
+### Depth Estimation
+- `depth_anything_v2_estimator.py`: Runs the DepthAnythingV2 model to extract dense depth maps for using those in Monacular Depth Estimation of 3D localization.
 
-### ✅ Phase 2: Real Drone Setup & Pre-Report (Due **May 16**)
-- [ ] Set up VOXL2 and calibrate cameras
-- [ ] Define ROS 2 package dependencies to replicate simulation
-- [ ] Finalize Python file structure for detection and mission nodes
-- [ ] Run detection-only tests (no flight)
-- [ ] Save test results and log ROS 2 bags
-
-### ✅ Phase 3: Final Report (Due **May 18**, buffer till May 20)
-- [ ] Include all detection results and bag logs
-- [ ] MATLAB-based graphs and analysis (severity, count, locations)
-- [ ] Add republisher node details if used
-- [ ] Compile results and export JSON/CSV reports from GUI
+### GUI Interface
+- `gui.py`: PyQt5-based GUI for mission state visualization and exporting reports.
 
 ---
 
-## 📦 Dataset & Tools
+## Datasets & Models
 
-- 🔥 Fire Models: Pretrained fire detection models (open-source)
-- 🧍 Person Detection: YOLOv8 + ONNX Runtime
-- 📷 Datasets: COCO, VisDrone
-- 💻 Tools: VOXL SDK, QGroundControl, MATLAB, PyQt5, ROS 2 Humble
-
----
-
-## 📝 Notes
-
-- [ ] Capture ROS 2 bag files for **every test and real-world run**
-- [ ] Add republisher node if topic alignment is required
-- [ ] Maintain logs and backups of model inferences and GUI exports
-- [ ] Keep GUI lightweight and telemetry intuitive for field use
+- **Fire & Person Detection**: YOLOv8 (pretrained on custom + COCO datasets)
+- **Monocular Depth**: DepthAnythingV2 (pretrained weights)
+- **Sample Datasets**: COCO, VisDrone, custom simulation cone/person sets
 
 ---
 
-## 🔗 References
 
-1. [VOXL2 SDK](https://docs.modalai.com)
-2. [YOLOv8 GitHub](https://github.com/ultralytics/ultralytics)
-3. [VisDrone Dataset](https://github.com/VisDrone/VisDrone-Dataset)
-4. [ONNX Runtime](https://onnxruntime.ai/)
-5. [PyQt5 GUI Reference](https://build-system.fman.io/pyqt5-tutorial)
+
