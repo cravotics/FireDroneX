@@ -9,15 +9,15 @@ from cv_bridge import CvBridge
 from ultralytics import YOLO
 import numpy as np
 import cv2
-import time # For RTSP retry delay
+import time 
 import os
-import torch # Import torch to check for CUDA
+import torch 
 
 class YoloDetectionNodeReal(Node):
     def __init__(self):
         super().__init__('yolo_detection_node_real')
 
-        # Log PyTorch and CUDA status
+        # Logging PyTorch and CUDA status
         self.get_logger().info(f"PyTorch version: {torch.__version__}")
         self.get_logger().info(f"CUDA available for PyTorch: {torch.cuda.is_available()}")
         if torch.cuda.is_available():
@@ -31,10 +31,10 @@ class YoloDetectionNodeReal(Node):
 
         self.declare_parameter('model_path', '/home/varun/ws_offboard_control/src/px4_ros_com/src/examples/yolo_models/best.pt')
         self.declare_parameter('rtsp_uri', 'rtsp://192.168.8.1:8900/live?intra=1')
-        self.declare_parameter('yolo_device', 'cpu') # 'cpu' or 'cuda:0' etc.
+        self.declare_parameter('yolo_device', 'cpu')
         self.declare_parameter('inference_width', 640)
         self.declare_parameter('inference_height', 480)
-        self.declare_parameter('loop_rate_hz', 20.0) # Target processing rate
+        self.declare_parameter('loop_rate_hz', 20.0)
 
         self.model_path = self.get_parameter('model_path').get_parameter_value().string_value
         self.rtsp_uri = self.get_parameter('rtsp_uri').get_parameter_value().string_value
@@ -50,72 +50,64 @@ class YoloDetectionNodeReal(Node):
         self.get_logger().info(f"Attempting to load YOLO model from: {self.model_path}")
         self.get_logger().info(f"YOLO model will attempt to use device: '{self.yolo_device}' for inference.")
         self.model = YOLO(self.model_path)
-        # Forcing model to device if ultralytics version requires it explicitly.
-        # Newer versions might handle 'device' in self.model() call or model constructor.
-        # If issues arise, uncommenting the line below might be needed,
-        # but passing 'device' to the model() call is generally preferred.
-        # self.model.to(self.yolo_device) 
-
         self.bridge = CvBridge()
 
         self.cap = None
         self.attempt_rtsp_connect()
-
+        
+        # QoS settings for ROS 2
         self.custom_qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
             history=HistoryPolicy.KEEP_LAST,
             depth=10
         )
-
+        
+        # Publisher for the detection topic
         self.detections_pub = self.create_publisher(
             Detection2DArray, 
             '/detections', 
             qos_profile=self.custom_qos_profile
         )
-        # Publishing debug image as uncompressed sensor_msgs.msg.Image
+        # Publishing debug image as uncompressed image stream
         self.debug_image_pub = self.create_publisher(
-            Image,  # Changed from CompressedImage
-            '/yolo/debug_image', # Changed topic name
+            Image,  
+            '/yolo/debug_image',
             qos_profile=self.custom_qos_profile 
         )
-        # Publisher for the raw (resized) image used for inference
+        # Publishing the raw image used for inference
         self.raw_image_pub = self.create_publisher(
             Image,
-            '/yolo/image_for_depth', # Topic for the depth node to subscribe to
+            '/yolo/image_for_depth', 
             qos_profile=self.custom_qos_profile
         )
 
         self.class_names = self.model.names
         self.get_logger().info(f"Model classes: {self.class_names}")
         
-        # Confidence thresholds
+        # Setting Confidence thresholds
         self.publish_confidence_threshold = 0.4  # General threshold for fire
         self.person_detection_confidence_threshold = 0.7 # For high-confidence person logging
 
         self.timer = self.create_timer(1.0 / self.loop_rate, self.loop)
         self.get_logger().info(f"YOLO Detection Node (Real Drone) started. Attempting to stream from {self.rtsp_uri}")
-
+    
+    # Attempt to connect to the RTSP stream using OpenCV
     def attempt_rtsp_connect(self):
         self.get_logger().info(f"Attempting to open RTSP stream: {self.rtsp_uri} using FFmpeg backend")
         if self.cap is not None:
             self.cap.release()
         
-        # Set environment variable to suggest TCP transport for RTSP
-        # This needs to be done before VideoCapture is called
         original_ffmpeg_options = os.environ.get('OPENCV_FFMPEG_CAPTURE_OPTIONS')
         os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = 'rtsp_transport;tcp'
         
         self.cap = cv2.VideoCapture(self.rtsp_uri, cv2.CAP_FFMPEG)
         
-        # Restore original environment variable if it was set, otherwise clear
         if original_ffmpeg_options is not None:
             os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS'] = original_ffmpeg_options
         else:
             del os.environ['OPENCV_FFMPEG_CAPTURE_OPTIONS']
 
-        # Set buffer size to a small value to reduce latency if needed, but might increase dropouts
-        # self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1) 
         if not self.cap.isOpened():
             self.get_logger().error(f"Failed to open RTSP stream: {self.rtsp_uri}. Will retry.")
             return False
@@ -128,13 +120,13 @@ class YoloDetectionNodeReal(Node):
         if self.cap is None or not self.cap.isOpened():
             self.get_logger().warn('RTSP stream is not open. Attempting to reconnect...')
             if not self.attempt_rtsp_connect():
-                time.sleep(1.0) # Wait a bit before retrying in the next loop iteration
+                time.sleep(1.0) 
                 return
             
         ok, frame_full = self.cap.read()
         if not ok or frame_full is None:
             self.get_logger().warn('RTSP dropout - frame not ok or None from cap.read(). Attempting to reconnect.')
-            self.attempt_rtsp_connect() # Try to reconnect
+            self.attempt_rtsp_connect() 
             return
 
         try:
@@ -143,22 +135,22 @@ class YoloDetectionNodeReal(Node):
             self.get_logger().error(f"Failed to resize frame: {e}")
             return
 
-        # Publish the resized frame that will be used for YOLO and depth
+        # Publishing the resized frame that will be used for YOLO and depth
         try:
             raw_image_msg = self.bridge.cv2_to_imgmsg(frame_resized, encoding="bgr8")
             raw_image_msg.header.stamp = current_timestamp
-            raw_image_msg.header.frame_id = "camera_link_resized" # A frame ID for the resized image
+            raw_image_msg.header.frame_id = "camera_link_resized" 
             self.raw_image_pub.publish(raw_image_msg)
         except Exception as e:
             self.get_logger().error(f"Failed to publish raw image: {e}")
 
 
-        # Perform inference
+        # Performimg inference
         results = self.model(frame_resized, verbose=False, device=self.yolo_device)[0] 
 
         det_array = Detection2DArray()
-        det_array.header.stamp = current_timestamp # Use the same timestamp
-        det_array.header.frame_id = "camera_link_resized" # Detections are in this frame
+        det_array.header.stamp = current_timestamp 
+        det_array.header.frame_id = "camera_link_resized" 
 
         processed_detections_for_publishing = []
         detections_for_drawing = []
@@ -172,17 +164,15 @@ class YoloDetectionNodeReal(Node):
                 passes_threshold = False
                 if class_name.lower() == 'fire' and confidence >= self.publish_confidence_threshold:
                     passes_threshold = True
-                    # self.get_logger().info(f"Detected FIRE with confidence: {confidence:.2f}") # Reduce verbosity
                 elif class_name.lower() == 'person' and confidence >= self.person_detection_confidence_threshold:
                      passes_threshold = True 
-                     # self.get_logger().info(f"Detected PERSON with high confidence: {confidence:.2f}")
                 elif class_name.lower() == 'person' and confidence >= self.publish_confidence_threshold: 
                     passes_threshold = True
-                    # self.get_logger().info(f"Detected PERSON with moderate confidence: {confidence:.2f}")
                 
                 if not passes_threshold:
                     continue
-
+                
+                # Creating and drawing bounding boxes
                 x1, y1, x2, y2 = map(int, box.xyxy[0]) 
                 w = x2 - x1
                 h = y2 - y1
@@ -205,21 +195,14 @@ class YoloDetectionNodeReal(Node):
                 
                 processed_detections_for_publishing.append(det_msg)
                 detections_for_drawing.append({'box': (x1, y1, x2, y2), 'label': class_name, 'conf': confidence, 'id': class_id})
-        # else:
-            # self.get_logger().info("No YOLO boxes in results.") # Reduce verbosity
-
-
+        
         if processed_detections_for_publishing:
             det_array.detections = processed_detections_for_publishing
             self.detections_pub.publish(det_array)
-            # self.get_logger().info(f"Published {len(det_array.detections)} detections.") # Reduce verbosity
-        # else:
-            # self.get_logger().info("No detections passed the confidence thresholds for publishing.") # Reduce verbosity
 
-
-        # Create and publish debug image (on the same resized frame)
+        # Creating and publishing debug image
         if self.debug_image_pub.get_subscription_count() > 0:
-            vis_frame = frame_resized.copy() # Draw on a new copy
+            vis_frame = frame_resized.copy() # Drawing on a new copy
             for det_info in detections_for_drawing:
                 x1, y1, x2, y2 = det_info['box']
                 label = det_info['label']
@@ -238,8 +221,7 @@ class YoloDetectionNodeReal(Node):
                 text = f"{label} {conf:.2f}"
                 cv2.putText(vis_frame, text, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
             try:
-                # debug_msg = self.bridge.cv2_to_compressed_imgmsg(vis_frame, dst_format='jpeg') # Old compressed
-                debug_msg = self.bridge.cv2_to_imgmsg(vis_frame, encoding="bgr8") # New uncompressed
+                debug_msg = self.bridge.cv2_to_imgmsg(vis_frame, encoding="bgr8") 
                 debug_msg.header.stamp = current_timestamp 
                 debug_msg.header.frame_id = "camera_link_debug" 
                 self.debug_image_pub.publish(debug_msg)
