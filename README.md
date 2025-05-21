@@ -49,5 +49,67 @@ The system supports **live plotting**, **RTSP video streaming**, and a lightweig
 
 ---
 
+## Process Workflow
+
+The FireDrone-X system follows this modular pipeline:
+
+1. **Camera Input**  
+   - Captures RGB images from a downward-facing high-res camera.
+
+2. **Object Detection**  
+   - YOLOv8 detects fire (cones) and humans in each frame.
+   - Detections are filtered by confidence and class ID.
+
+3. **Fire Localization**  
+   Two localization strategies are implemented:
+   - **Monocular Projection**  
+     - Transforms pixel coordinates to ground-plane (x, y) using camera intrinsics and pitch angle.
+   - **Monocular Depth Estimation**  
+     - Uses DepthAnythingV2 model to generate depth map.
+     - Extracts true 3D coordinates (x, y, z) of fire targets.
+
+4. **Mission Planning**  
+   - Selects nearest unvisited fire.
+   - Sends UAV toward the fire via position setpoints.
+   - Switches to circling once reached untill it finds next target.
+
+5. **Visualization & Control**  
+   - RTSP stream and real-time plots update the GUI.
+   - GUI shows detection feed, fire list, and drone odometry.
+   - Uses ROS 2 messages to publish control commands to PX4.
+
+## Models & Datasets
+
+- **Fire & Human Detection**  
+  - Model: [YOLOv8](https://github.com/ultralytics/ultralytics)  
+  - Datasets: COCO, VisDrone, and custom-simulated cone/person layouts
+
+- **Monocular Depth Estimation**  
+  - Model: [Depth Anything V2](https://github.com/isl-org/DPT) by [Intel ISL](https://www.intel.com/content/www/us/en/research/research-area/isl.html)  
+  - Paper: *Depth Anything: Unleashing the Power of Large-Scale Image-Text Data for Monocular Depth Estimation*  
+    ([arXiv:2402.13242](https://arxiv.org/abs/2402.13242))  
+  - License: [MIT License](https://github.com/isl-org/Depth-Anything/blob/main/LICENSE)
+
+---
+
+## Hardware Platform
+
+- **VOXL2 Flight Deck** by [ModalAI](https://www.modalai.com/products/voxl-2)  
+  - SoC: Qualcomm QRB5165  
+  - Integrated PX4 Autopilot 
+  - Camera: Hires (Cam Config 11)  
+  - Communication: WiFi and UART over VOXL2 IO board  
+  - ROS 2 support via `voxl-mpa-to-ros2` bridge ([GitHub](https://github.com/modalai/voxl-mpa-to-ros2))
+
+---
+
+## Acknowledgments
+
+We thank the following projects and teams for enabling this work:
+
+- **Intel ISL** for open-sourcing the Depth Anything V2 model  
+- **Ultralytics** for maintaining YOLOv8  
+- **ModalAI** for providing the VOXL2 hardware and PX4 integration tools  
+- **PX4 Autopilot** and **ROS 2 Humble** ecosystem for open-source autonomy development
 
 
