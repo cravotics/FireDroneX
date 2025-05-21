@@ -9,14 +9,13 @@ from cv_bridge import CvBridge
 from ultralytics import YOLO
 import numpy as np
 import cv2
-import torch # Import torch to check for CUDA
-
+import torch 
 
 class YoloDetectionNode(Node):
     def __init__(self):
         super().__init__('yolo_detection_node')
 
-        # Log PyTorch and CUDA status
+        # Logging PyTorch and CUDA information
         self.get_logger().info(f"PyTorch version: {torch.__version__}")
         self.get_logger().info(f"CUDA available for PyTorch: {torch.cuda.is_available()}")
         if torch.cuda.is_available():
@@ -36,44 +35,49 @@ class YoloDetectionNode(Node):
         self.model = YOLO(self.model_path)
         self.bridge = CvBridge()
 
-        # Define the desired QoS profile for PUBLISHERS
+        # Defining the desired QoS profile for the image publisher
         self.image_publisher_qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.VOLATILE, # Changed from TRANSIENT_LOCAL
+            durability=DurabilityPolicy.VOLATILE, 
             history=HistoryPolicy.KEEP_LAST,
-            depth=1 # For image streams, often only latest is needed
+            depth=1 
         )
 
-        # Define a specific QoS profile for CAMERA SUBSCRIPTION
+        # Define a specific QoS profile for the camera subscription
         self.camera_subscription_qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE, # Camera streams are often reliable
-            durability=DurabilityPolicy.VOLATILE,    # Matches publisher if it's volatile
+            reliability=ReliabilityPolicy.RELIABLE, 
+            durability=DurabilityPolicy.VOLATILE,    
             history=HistoryPolicy.KEEP_LAST,
-            depth=1 # For image streams, often only latest is needed by this node
+            depth=1 
         )
-
+        
+        # Creating a new publisher for the detections
         self.detections_pub = self.create_publisher(
             Detection2DArray, 
             '/detections', 
-            qos_profile=self.image_publisher_qos # Consistent QoS for all its pubs for now
+            qos_profile=self.image_publisher_qos 
         )
+
+        # Creating a new publisher for the debug image
         self.debug_image_pub = self.create_publisher(
             Image, 
             '/yolo/debug_image', 
-            qos_profile=self.image_publisher_qos # Use new VOLATILE QoS
+            qos_profile=self.image_publisher_qos 
         )
-
+        
+        # Creating a new publisher for the raw image 
         self.image_for_depth_pub = self.create_publisher(
             Image,
             '/yolo/image_for_depth',
             qos_profile=self.image_publisher_qos
         )
-
+        
+        # Subscribing to the camera topic with the defined QoS profile
         self.create_subscription(
             Image, 
             self.camera_topic, 
             self.image_callback, 
-            qos_profile=self.camera_subscription_qos_profile # Use specific QoS for camera sub
+            qos_profile=self.camera_subscription_qos_profile
         )
 
         self.class_names = self.model.names
@@ -81,22 +85,22 @@ class YoloDetectionNode(Node):
         self.get_logger().info(f"YOLO Detection Node started. Subscribed to {self.camera_topic}")
 
         # Confidence thresholds
-        self.publish_confidence_threshold = 0.4  # General threshold, allows fires >= 0.4
-        self.person_detection_confidence_threshold = 0.7 # For high-confidence person logging, person still needs to pass 0.4 to be published
+        self.publish_confidence_threshold = 0.4  # General threshold 
+        self.person_detection_confidence_threshold = 0.7 # Specific threshold for person detection
     
 
     def image_callback(self, msg: Image):
         self.get_logger().info("image_callback TRIGGERED!")
         self.get_logger().info(f"Incoming image encoding: {msg.encoding}")
 
-        # Publish the raw image for depth node and GUI person focus
+        # Publishing the raw image for depth node and GUI person focus
         try:
             self.image_for_depth_pub.publish(msg)
             self.get_logger().info(f"Published raw image to /yolo/image_for_depth (encoding: {msg.encoding})")
         except Exception as e:
             self.get_logger().error(f"Failed to publish raw image to /yolo/image_for_depth: {e}")
 
-        # Convert image with proper encoding handling
+        # Converting image with proper encoding handling
         try:
             if msg.encoding == 'mono8':
                 cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
@@ -114,7 +118,6 @@ class YoloDetectionNode(Node):
 
         if results.boxes is None or len(results.boxes) == 0:
             self.get_logger().info("No raw detections from YOLO model.")
-            # Still publish the debug image if needed, even if no detections shown
             debug_msg = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
             debug_msg.header = msg.header
             self.get_logger().info(f"No dets: Publishing /yolo/debug_image (shape: {cv_image.shape}, encoding: bgr8)")
@@ -124,32 +127,31 @@ class YoloDetectionNode(Node):
         det_array = Detection2DArray()
         det_array.header = msg.header
 
-        # Process detections
+        # Processing detections
         processed_detections_for_publishing = []
-        detections_for_drawing = [] # Store all detections that pass the publish_confidence_threshold for drawing
+        detections_for_drawing = [] # Storing all detections that pass the publish_confidence_threshold for drawing
 
         for box in results.boxes:
             class_id = int(box.cls[0])
             confidence = float(box.conf[0])
             class_name = self.class_names.get(class_id, str(class_id))
 
-            # Log every raw detection from YOLO
+            # Logging every raw detection from YOLO
             self.get_logger().info(f"RAW YOLO Detection: Class: '{class_name}' (ID: {class_id}), Confidence: {confidence:.4f}")
 
-            # Check against general publishing threshold
+            # Checking against general publishing threshold
             if confidence < self.publish_confidence_threshold:
                 continue
 
-            # Specific handling for 'person'
+            # Person detection with specific logging
             if class_name.lower() == 'person' and confidence >= self.person_detection_confidence_threshold:
                 self.get_logger().info(f"Detected PERSON with high confidence: {confidence:.2f} at bbox=({box.xyxy[0][0]},{box.xyxy[0][1]},{box.xyxy[0][2]},{box.xyxy[0][3]})")
-            elif class_name.lower() == 'person': # Person detected but below high-confidence logging threshold
+            elif class_name.lower() == 'person':
                 self.get_logger().info(f"Detected PERSON with moderate confidence: {confidence:.2f} at bbox=({box.xyxy[0][0]},{box.xyxy[0][1]},{box.xyxy[0][2]},{box.xyxy[0][3]})")
             elif class_name.lower() == 'fire':
                  self.get_logger().info(f"Detected FIRE with confidence: {confidence:.2f}")
-            # Add other specific class logging here if needed
 
-            # Prepare detection for publishing
+            # Preparing bounding boxes for detection
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             w = x2 - x1
             h = y2 - y1
@@ -176,7 +178,6 @@ class YoloDetectionNode(Node):
 
         if not processed_detections_for_publishing:
             self.get_logger().info("No detections passed the confidence threshold for publishing.")
-            # Still publish the debug image if needed, even if no detections shown
             debug_msg = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
             debug_msg.header = msg.header
             self.get_logger().info(f"No dets: Publishing /yolo/debug_image (shape: {cv_image.shape}, encoding: bgr8)")
@@ -187,13 +188,13 @@ class YoloDetectionNode(Node):
         self.detections_pub.publish(det_array)
         self.get_logger().info(f"Published {len(det_array.detections)} detections passing threshold {self.publish_confidence_threshold}.")
 
-        # Draw bounding boxes for all published detections
+        # Drawing bounding boxes for all published detections
         for det_info in detections_for_drawing:
             x1, y1, x2, y2 = det_info['box']
             label = det_info['label']
             conf = det_info['conf']
 
-            # Assign color based on class for better visualization
+            # Assigning color based on class for better visualization
             color = (0, 255, 0) # Default Green
             if label.lower() == 'fire':
                 color = (0, 0, 255) # Red for fire
@@ -202,30 +203,29 @@ class YoloDetectionNode(Node):
 
             cv2.rectangle(cv_image, (x1, y1), (x2, y2), color, 2)
             
-            # Calculate and draw centroid
+            # Calculating and drawing centroid
             center_x = int((x1 + x2) / 2)
             center_y = int((y1 + y2) / 2)
-            cv2.circle(cv_image, (center_x, center_y), 5, color, -1) # Draw a filled circle (radius 5)
+            cv2.circle(cv_image, (center_x, center_y), 5, color, -1) 
             
+            # Adding label and confidence text
             text = f"{label} {conf:.2f}"
             (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
             
-            # Background rectangle for text
-            # Ensure the rectangle for text is within image bounds, especially at the top
+            # Ensuring the rectangle for text is within image bounds, especially at the top
             text_bg_y1 = y1 - th - 4
             text_bg_y2 = y1
-            # If drawing outside the top, shift it below the bbox top
             if text_bg_y1 < 0:
                 text_bg_y1 = y1 + 2 
                 text_bg_y2 = y1 + th + 4
             
             cv2.rectangle(cv_image, (x1, text_bg_y1), (x1 + tw, text_bg_y2), color, -1)
-            # Adjust text position accordingly
+            # Adjusting text position accordingly
             text_y = y1 - 2 if text_bg_y2 == y1 else y1 + th 
             cv2.putText(cv_image, text, (x1, text_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
 
 
-        # Convert back and publish debug image
+        # Converting and publishing debug image
         try:
             debug_msg = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
             debug_msg.header = msg.header
@@ -234,10 +234,6 @@ class YoloDetectionNode(Node):
         except Exception as e:
             self.get_logger().error(f"Error converting or publishing debug image: {e}")
         
-        # self.get_logger().info("Published /yolo/debug_image with overlays.") # Redundant now
-        # cv2.imwrite('/tmp/annotated_debug.png', cv_image) # Can be enabled for file-based debugging
-
-
 def main(args=None):
     rclpy.init(args=args)
     node = YoloDetectionNode()
