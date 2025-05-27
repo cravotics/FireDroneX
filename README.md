@@ -120,7 +120,7 @@ The design of **FireDrone-X** was centered around modularity, robustness, and co
 +-----------------------------+
 | RTSP Stream & GUI Feedback  |
 +-----------------------------+
-
+```
 
 ## Process Workflow
 
@@ -150,6 +150,7 @@ The FireDrone-X system follows this modular pipeline:
    - RTSP stream and real-time plots update the GUI.
    - GUI shows detection feed, fire list, and drone odometry.
    - Uses ROS 2 messages to publish control commands to PX4.
+
 
 ## Models & Datasets
 
