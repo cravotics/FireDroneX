@@ -176,6 +176,13 @@ The FireDrone-X system follows this modular pipeline:
   - ROS 2 support via `voxl-mpa-to-ros2` bridge ([GitHub](https://github.com/modalai/voxl-mpa-to-ros2))
 
 ---
+## 📹 Video Demonstrations
+
+A short screen-capture of the Gazebo simulation and a real-world lab test on VOXL2 are available online:
+
+- 🔹 [**Simulation** – Autonomous fire localization and navigation]([https://youtu.be/your-simulation-video-link](https://youtu.be/d4EYOBy9j_g))
+- 🔹 [**Real-world** – Depth-assisted localization on VOXL2]([https://youtu.be/your-realworld-video-link](https://youtu.be/0MFa7E26Zhk))
+---
 
 ## Acknowledgments
 
