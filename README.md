@@ -49,6 +49,79 @@ The system supports **live plotting**, **RTSP video streaming**, and a lightweig
 
 ---
 
+## Design Workflow
+
+The design of **FireDrone-X** was centered around modularity, robustness, and compatibility with the VOXL2 platform. The overall workflow is broken down into four primary stages:
+
+---
+
+### 1. **System Architecture Design**
+
+- **Objective**: Real-time detection and localization of fire and humans from a UAV using a monocular camera.
+- **Constraints**:
+  - Edge inference on VOXL2 (limited compute)
+  - ROS 2 Humble compatibility
+  - Monocular setup (no stereo/depth sensor)
+- **Design Choices**:
+  - Use YOLOv8 for fire and person detection due to its accuracy and lightweight deployment.
+  - Integrate **DepthAnythingV2** to extract depth maps from a single RGB image to support 3D localization.
+  - Implement modular mission planning logic supporting two strategies: monocular projection and monocular depth.
+
+---
+
+### 2. **Module Development & Integration**
+
+| Module | Description |
+|--------|-------------|
+| **YOLOv8 Detection** | Fire and human bounding box detection from RGB stream |
+| **Depth Estimation** | Generates per-pixel depth using DepthAnythingV2 |
+| **Localization Logic** | Estimates (x, y, z) using either trigonometry or dense depth |
+| **Trajectory Planner** | Selects targets and sends PX4-compatible setpoints |
+| **GUI + Visualization** | Plots detection, state transitions, and publishes RTSP stream |
+| **ROS 2 Messaging** | Custom messages for detection, localization, and setpoint handling |
+
+- All modules are containerized and optimized for VOXL2.
+- A fallback mechanism allows switching between projection and depth-based localization at runtime.
+
+---
+
+### 3. **Mission Execution Flow**
+
+```text
++------------------+
+|  RGB Camera Feed |
++--------+---------+
+         |
+         v
++--------+---------+           +-------------------------+
+|   YOLOv8 Detector  | ----->  | Bounding Boxes + Class  |
++--------+---------+           +-------------------------+
+         |
+         v
++--------------------------+
+| Depth Estimator (DAv2)  | --> Optional → Depth Map
++--------------------------+
+         |
+         v
++------------------------------+
+| Fire Localization Strategy  |
+| • Monocular Projection      |
+| • Depth Estimation (DAv2)   |
++------------------------------+
+         |
+         v
++-----------------------------+
+| Mission Planner (ROS 2)     |
+| - Target selection          |
+| - PX4 setpoint publishing   |
++-----------------------------+
+         |
+         v
++-----------------------------+
+| RTSP Stream & GUI Feedback  |
++-----------------------------+
+
+
 ## Process Workflow
 
 The FireDrone-X system follows this modular pipeline:
