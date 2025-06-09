@@ -173,7 +173,7 @@ The FireDrone-X system follows this modular pipeline:
   - Integrated PX4 Autopilot 
   - Camera: Hires (Cam Config 11)  
   - Communication: WiFi and UART over VOXL2 IO board  
-  - ROS 2 support via `voxl-mpa-to-ros2` bridge ([GitHub](https://github.com/modalai/voxl-mpa-to-ros2))
+  - ROS 2 support via `voxl-mpa-to-ros2` bridge ([Gitlab]((https://gitlab.com/voxl-public/voxl-sdk/utilities/voxl-mpa-to-ros)))
 
 ---
 ## 📹 Video Demonstrations
